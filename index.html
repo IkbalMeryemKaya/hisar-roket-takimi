@@ -358,6 +358,10 @@
     <div class="sec-head"><span class="num">07</span><h2 class="display i18n" data-tr="İş Birliği Formu" data-en="Partnership Form"></h2></div>
     <p class="lead i18n" data-tr="Sponsor olmak veya iş birliği yapmak için formu doldurun, en kısa sürede dönüş yapalım." data-en="Fill out the form to become a sponsor or partner, and we will get back to you soon."></p>
     <form class="sponsor" id="sponsorForm" novalidate>
+      <input type="hidden" name="access_key" value="ae00f873-d805-4c62-a34f-a979aa4ff574">
+      <input type="hidden" name="subject" value="Hisar Roket - Yeni iş birliği başvurusu">
+      <input type="hidden" name="from_name" value="Hisar Roket Web Sitesi">
+      <input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" style="display:none">
       <label><span class="i18n" data-tr="Ad Soyad *" data-en="Full Name *"></span><input type="text" name="name" maxlength="80" autocomplete="name"><small class="err"></small></label>
       <label><span class="i18n" data-tr="Firma / Kurum Adı" data-en="Company / Organization"></span><input type="text" name="company" maxlength="100"><small class="err"></small></label>
       <label><span class="i18n" data-tr="E-posta" data-en="Email"></span><input type="email" name="email" maxlength="120" autocomplete="email"><small class="err"></small></label>
@@ -415,7 +419,7 @@
 
 <script>
   const state = { lang: 'en' };
-  const FORM_ENDPOINT = ''; // Web3Forms erişim anahtarı alındığında buraya eklenecek
+  const FORM_ENDPOINT = 'https://api.web3forms.com/submit'; // Web3Forms erişim anahtarı alındığında buraya eklenecek
   const COUNTDOWN = { date: '', tr: 'Yarışmaya kalan süre', en: 'Time until competition' };
 
   const T_TEXT = {
@@ -557,7 +561,8 @@
     btn.disabled = true;
     try {
       const res = await fetch(FORM_ENDPOINT, { method: 'POST', body: new FormData(sponsorForm), headers: { Accept: 'application/json' } });
-      if (res.ok) { sponsorForm.reset(); Object.keys(errorKeys).forEach(n => setError(n, '')); setStatus('ok', 'ok'); }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) { sponsorForm.reset(); Object.keys(errorKeys).forEach(n => setError(n, '')); setStatus('ok', 'ok'); }
       else setStatus('error', 'bad');
     } catch (err) { setStatus('error', 'bad'); }
     finally { btn.disabled = false; }

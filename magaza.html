@@ -94,6 +94,20 @@
     table.specs th { width: 40%; }
   }
   @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  .order-form { display: grid; gap: 14px; max-width: 560px; }
+  .order-form label { display: grid; gap: 6px; font-size: 0.92rem; font-weight: 500; }
+  .order-form input, .order-form textarea { font: inherit; padding: 11px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .order-form textarea { min-height: 90px; resize: vertical; }
+  .order-form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .order-form .err { display: none; color: #e5484d; font-size: 0.82rem; font-weight: 500; }
+  .order-form label.invalid .err { display: block; }
+  .order-form label.invalid input, .order-form label.invalid textarea { border-color: #e5484d; }
+  .order-form button.order { justify-self: start; border: 0; cursor: pointer; }
+  .order-form button.order:disabled { opacity: 0.6; cursor: wait; }
+  .order-status { font-size: 0.9rem; margin: 0; color: var(--mute); }
+  .order-status.ok { color: #2ea86a; }
+  .order-status.bad { color: #e5484d; }
+  @media (max-width: 560px) { .order-form .row2 { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -174,8 +188,7 @@
           <h1 class="display">${t(p.name)}</h1>
           <p class="short">${t(p.short)}</p>
           <div class="price-row"><div class="price-big">${p.price}</div><div class="lead-time">${t(p.lead)}</div></div>
-          <a class="order" href="mailto:hisarroket@gmail.com?subject=${subj}">${u.order}</a>
-          <p class="order-note">${u.orderNote}</p>
+          ${orderFormHTML(p)}
           <ul class="feat">${feats}</ul>
         </div>
       </div>
@@ -192,7 +205,117 @@
       document.querySelectorAll('.thumbs button').forEach(x => x.classList.toggle('on', x === b));
     }));
     setNav('store');
+    bindOrderForm(p);
     window.scrollTo(0, 0);
+  }
+
+
+  const OT = {
+    tr: { title: 'Sipariş Talebi', name: 'Ad Soyad *', email: 'E-posta', phone: 'Telefon', qty: 'Adet', note: 'Not (isteğe bağlı)', submit: 'Sipariş Talebi Gönder', note2: 'Talebiniz bize e-posta ile ulaşır, sizinle bireysel olarak iletişime geçeriz.', contact: 'E-posta veya telefondan en az birini girin.', required: 'Bu alan zorunludur.', emailErr: 'Geçerli bir e-posta adresi girin.', phoneErr: 'Telefon numarası 10 veya 11 haneli olmalıdır.', qtyErr: 'Adet 1 ile 50 arasında olmalıdır.', ok: 'Talebiniz alındı, en kısa sürede sizinle iletişime geçeceğiz.', error: 'Gönderilemedi, lütfen tekrar deneyin.', sending: 'Gönderiliyor…' },
+    en: { title: 'Order Request', name: 'Full Name *', email: 'Email', phone: 'Phone', qty: 'Quantity', note: 'Note (optional)', submit: 'Send Order Request', note2: 'Your request reaches us by email and we will contact you personally.', contact: 'Please provide an email address or a phone number.', required: 'This field is required.', emailErr: 'Please enter a valid email address.', phoneErr: 'Phone number must be 10 or 11 digits.', qtyErr: 'Quantity must be between 1 and 50.', ok: 'Your request has been received. We will contact you soon.', error: 'Could not send. Please try again.', sending: 'Sending…' }
+  };
+  const WEB3_KEY = 'ae00f873-d805-4c62-a34f-a979aa4ff574';
+
+  function orderFormHTML(p) {
+    const o = OT[state.lang];
+    return `
+      <form class="order-form" id="orderForm" novalidate>
+        <input type="hidden" name="access_key" value="${WEB3_KEY}">
+        <input type="hidden" name="subject" value="${t(p.name)} - Sipariş Talebi">
+        <input type="hidden" name="from_name" value="Hisar Roket Mağaza">
+        <input type="hidden" name="product" value="${t(p.name)}">
+        <input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" style="display:none">
+        <label>${o.name}<input type="text" name="name" maxlength="80" autocomplete="name"><small class="err"></small></label>
+        <div class="row2">
+          <label>${o.email}<input type="email" name="email" maxlength="120" autocomplete="email"><small class="err"></small></label>
+          <label>${o.phone}<input type="tel" name="phone" inputmode="numeric" maxlength="14" autocomplete="tel"><small class="err"></small></label>
+        </div>
+        <label>${o.qty}<input type="number" name="quantity" min="1" max="50" value="1"><small class="err"></small></label>
+        <label>${o.note}<textarea name="note" maxlength="500"></textarea></label>
+        <button class="order" type="submit">${o.submit}</button>
+        <p class="order-note">${o.note2}</p>
+        <p class="order-status" id="orderStatus" role="status" aria-live="polite"></p>
+      </form>`;
+  }
+
+  function bindOrderForm(p) {
+    const form = document.getElementById('orderForm');
+    if (!form) return;
+    const f = n => form.querySelector(`[name="${n}"]`);
+    const status = document.getElementById('orderStatus');
+    const btn = form.querySelector('button[type="submit"]');
+    const setErr = (n, msg) => {
+      const label = f(n).closest('label');
+      label.classList.toggle('invalid', !!msg);
+      label.querySelector('.err').textContent = msg || '';
+    };
+    const fmt = d => {
+      const g = d[0] === '0' ? [4, 3, 2, 2] : [3, 3, 2, 2];
+      const parts = []; let i = 0;
+      for (const n of g) { if (i >= d.length) break; parts.push(d.slice(i, i + n)); i += n; }
+      return parts.join(' ');
+    };
+    f('phone').addEventListener('input', e => {
+      const d = e.target.value.replace(/\D/g, '');
+      e.target.value = fmt(d.slice(0, d[0] === '0' ? 11 : 10));
+      setErr('phone', '');
+    });
+    ['name', 'email', 'quantity'].forEach(n => f(n).addEventListener('input', () => setErr(n, '')));
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const o = OT[state.lang];
+      const name = f('name').value.trim();
+      const email = f('email').value.trim();
+      const digits = f('phone').value.replace(/\D/g, '');
+      const qty = Number(f('quantity').value);
+      let ok = true;
+
+      setErr('name', name ? '' : o.required);
+      if (!name) ok = false;
+
+      if (!email && !digits) {
+        setErr('email', o.contact); setErr('phone', o.contact); ok = false;
+      } else {
+        const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+        const phoneOk = digits.length === 10 || (digits.length === 11 && digits[0] === '0');
+        setErr('email', email && !emailOk ? o.emailErr : '');
+        setErr('phone', digits && !phoneOk ? o.phoneErr : '');
+        if (email && !emailOk) ok = false;
+        if (digits && !phoneOk) ok = false;
+      }
+
+      const qtyOk = Number.isInteger(qty) && qty >= 1 && qty <= 50;
+      setErr('quantity', qtyOk ? '' : o.qtyErr);
+      if (!qtyOk) ok = false;
+
+      status.textContent = '';
+      status.className = 'order-status';
+      if (!ok) return;
+
+      btn.disabled = true;
+      status.textContent = o.sending;
+      try {
+        const res = await fetch('https://api.web3forms.com/submit', {
+          method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          form.reset();
+          f('quantity').value = 1;
+          status.textContent = o.ok;
+          status.className = 'order-status ok';
+        } else {
+          status.textContent = o.error;
+          status.className = 'order-status bad';
+        }
+      } catch (err) {
+        status.textContent = o.error;
+        status.className = 'order-status bad';
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   function setNav(which) {
